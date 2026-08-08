@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import TimelineClip from "./TimelineClip.jsx";
+import TimelineTrack from "./TimelineTrack.jsx";
 import { useTimeline } from "../timeline/hooks/useTimeline.js";
 import { TRACK_HEIGHT } from "../timeline/constants.js";
+import { isAdditiveSelectionKey } from "../timeline/utils/input.js";
 
 const RENDER_BUFFER_PX = 400;
 
@@ -19,21 +20,39 @@ function rulerStep(pxPerSecond) {
   return 600;
 }
 
+function isEditableTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
 export default function Timeline() {
   const { state, actions, helpers } = useTimeline();
-  const { tracks, selectedClipIds, currentTime: playhead, duration: totalDuration, pixelsPerSecond: pxPerSecond } = state;
-  const { setCurrentTime, setZoom, addTrack, removeTrack, selectClip, setViewport } = actions;
+  const {
+    tracks,
+    selectedClipIds,
+    lastSelectedClipId,
+    currentTime: playhead,
+    duration: totalDuration,
+    pixelsPerSecond: pxPerSecond,
+  } = state;
+  const {
+    setCurrentTime,
+    setZoom,
+    addTrack,
+    removeTrack,
+    selectClip,
+    toggleClipSelection,
+    selectClipRange,
+    clearSelection,
+    selectAllClips,
+    setViewport,
+  } = actions;
   const { getClipLeft, getClipWidth } = helpers;
   const scrollRef = useRef(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 
   const contentWidth = Math.max((totalDuration + 30) * pxPerSecond, 800);
-  const contentHeight = tracks.length * TRACK_HEIGHT;
-
-  const clips = useMemo(
-    () => tracks.flatMap((track, trackIndex) => track.clips.map((clip) => ({ ...clip, trackIndex }))),
-    [tracks]
-  );
+  const contentHeight = Math.max(tracks.length, 1) * TRACK_HEIGHT;
 
   useEffect(() => {
     const measureViewport = () => {
@@ -45,6 +64,25 @@ export default function Timeline() {
     window.addEventListener("resize", measureViewport);
     return () => window.removeEventListener("resize", measureViewport);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (isEditableTarget(event.target)) return;
+
+      if (isAdditiveSelectionKey(event) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        selectAllClips();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        clearSelection();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [clearSelection, selectAllClips]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -67,122 +105,175 @@ export default function Timeline() {
     });
   };
 
-  const seekAtPointer = useCallback((e) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left + el.scrollLeft;
-    setCurrentTime(Math.max(0, x / pxPerSecond));
-  }, [pxPerSecond, setCurrentTime]);
+  const seekAtPointer = useCallback(
+    (e) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left + el.scrollLeft;
+      setCurrentTime(Math.max(0, x / pxPerSecond));
+    },
+    [pxPerSecond, setCurrentTime]
+  );
 
   const seekOnClick = (e) => {
     if (e.button !== 0) return;
     seekAtPointer(e);
   };
 
-  const handleClipSelection = useCallback((event) => {
-    event.stopPropagation();
-    selectClip(event.currentTarget.dataset.clipId, event.metaKey || event.ctrlKey);
-  }, [selectClip]);
+  const handleClipSelect = useCallback(
+    (event, clip) => {
+      event.stopPropagation();
 
-  const handleRemoveTrack = useCallback((trackId) => {
-    const removedClips = removeTrack(trackId);
-    removedClips.forEach((clip) => {
-      if (clip.url) URL.revokeObjectURL(clip.url);
-    });
-  }, [removeTrack]);
+      if (event.shiftKey) {
+        const anchorId = lastSelectedClipId || selectedClipIds[0];
+        if (anchorId) {
+          selectClipRange(anchorId, clip.id);
+        } else {
+          selectClip(clip.id);
+        }
+        return;
+      }
 
-  const visibleClips = useMemo(() => {
+      if (isAdditiveSelectionKey(event)) {
+        toggleClipSelection(clip.id);
+        return;
+      }
+
+      selectClip(clip.id);
+    },
+    [
+      lastSelectedClipId,
+      selectClip,
+      selectClipRange,
+      selectedClipIds,
+      toggleClipSelection,
+    ]
+  );
+
+  const handleRemoveTrack = useCallback(
+    (trackId) => {
+      const removedClips = removeTrack(trackId);
+      removedClips.forEach((clip) => {
+        if (clip.url) URL.revokeObjectURL(clip.url);
+      });
+    },
+    [removeTrack]
+  );
+
+  const visibleClipIds = useMemo(() => {
     const visibleStartPx = state.viewport.scrollX - RENDER_BUFFER_PX;
     const visibleEndPx = state.viewport.scrollX + (viewportSize.width || 1000) + RENDER_BUFFER_PX;
-    return clips.filter((clip) => {
-      const left = clip.start * pxPerSecond;
-      const right = (clip.start + clip.duration) * pxPerSecond;
-      return right >= visibleStartPx && left <= visibleEndPx;
+    const ids = new Set();
+
+    tracks.forEach((track) => {
+      track.clips.forEach((clip) => {
+        const left = clip.start * pxPerSecond;
+        const right = (clip.start + clip.duration) * pxPerSecond;
+        if (right >= visibleStartPx && left <= visibleEndPx) {
+          ids.add(clip.id);
+        }
+      });
     });
-  }, [clips, pxPerSecond, state.viewport.scrollX, viewportSize.width]);
+
+    return ids;
+  }, [pxPerSecond, state.viewport.scrollX, tracks, viewportSize.width]);
 
   const trackTop = state.viewport.scrollY - RENDER_BUFFER_PX;
   const trackBottom = state.viewport.scrollY + (viewportSize.height || 600) + RENDER_BUFFER_PX;
 
+  const trackSharedProps = {
+    selectedClipIds,
+    visibleClipIds,
+    getClipLeft,
+    getClipWidth,
+    onClipSelect: handleClipSelect,
+    onRemoveTrack: handleRemoveTrack,
+    canRemoveTrack: tracks.length > 1,
+  };
+
   return (
     <div className="timeline">
       <div className="timeline-toolbar">
-        <button className="btn btn-small" onClick={() => zoomBy(0.7)}>
+        <button type="button" className="btn btn-small" onClick={() => zoomBy(0.7)}>
           − Zoom
         </button>
         <span className="dim small mono">{pxPerSecond}px/s</span>
-        <button className="btn btn-small" onClick={() => zoomBy(1.4)}>
+        <button type="button" className="btn btn-small" onClick={() => zoomBy(1.4)}>
           + Zoom
         </button>
         <span className="timeline-spacer" />
-        <button className="btn btn-small" onClick={() => addTrack({ name: `Track ${tracks.length + 1}` })}>
+        <button
+          type="button"
+          className="btn btn-small"
+          onClick={() => addTrack({ name: `Track ${tracks.length + 1}`, type: "video" })}
+        >
           + Thêm track
         </button>
+        {selectedClipIds.length > 0 && (
+          <span className="dim small mono">{selectedClipIds.length} clip đang chọn</span>
+        )}
       </div>
 
-      <div className="timeline-body">
-        <div className="timeline-track-labels" style={{ height: contentHeight }}>
-          {tracks.map((t, i) => {
-            if (i * TRACK_HEIGHT + TRACK_HEIGHT < trackTop || i * TRACK_HEIGHT > trackBottom) {
-              return <div key={t.id} style={{ height: TRACK_HEIGHT }} />;
-            }
-            return (
-              <div key={t.id} className="track-label" style={{ height: TRACK_HEIGHT }}>
-                <span>{t.name}</span>
-                {tracks.length > 1 && (
-                  <button className="track-remove" onClick={() => handleRemoveTrack(t.id)}>
-                    ×
-                  </button>
-                )}
-              </div>
-            );
-          })}
+      {tracks.length === 0 ? (
+        <div className="timeline-empty dim">
+          Chưa có track — bấm &quot;+ Thêm track&quot; hoặc thêm video để bắt đầu
         </div>
-
-        <div className="timeline-scroll" ref={scrollRef} onScroll={handleScroll}>
-          <div className="timeline-ruler" style={{ width: contentWidth }} onPointerDown={seekOnClick}>
-            {Array.from({ length: Math.ceil(totalDuration / rulerStep(pxPerSecond)) + 5 }).map((_, i) => {
-              const t = i * rulerStep(pxPerSecond);
+      ) : (
+        <div className="timeline-body">
+          <div className="timeline-track-labels" style={{ height: contentHeight }}>
+            {tracks.map((track, trackIndex) => {
+              if (trackIndex * TRACK_HEIGHT + TRACK_HEIGHT < trackTop || trackIndex * TRACK_HEIGHT > trackBottom) {
+                return <div key={track.id} style={{ height: TRACK_HEIGHT }} />;
+              }
               return (
-                <span key={i} className="ruler-tick" style={{ left: t * pxPerSecond }}>
-                  {fmtRuler(t)}
-                </span>
+                <TimelineTrack
+                  key={track.id}
+                  track={track}
+                  trackIndex={trackIndex}
+                  showLabel
+                  {...trackSharedProps}
+                />
               );
             })}
           </div>
 
-          <div className="timeline-tracks" style={{ width: contentWidth, height: contentHeight }} onPointerDown={seekOnClick}>
-            {tracks.map((t, i) => (
-              <div
-                key={t.id}
-                className="track-lane"
-                style={{ top: i * TRACK_HEIGHT, height: TRACK_HEIGHT, width: contentWidth }}
-              />
-            ))}
-
-            {visibleClips.map((clip) => {
-              return (
-                <div key={clip.id} style={{ position: "absolute", top: clip.trackIndex * TRACK_HEIGHT, left: 0, height: TRACK_HEIGHT }}>
-                  <TimelineClip
-                    clip={clip}
-                    left={getClipLeft(clip)}
-                    width={Math.max(6, getClipWidth(clip))}
-                    selected={selectedClipIds.includes(clip.id)}
-                    onClick={handleClipSelection}
-                  />
-                </div>
-              );
-            })}
+          <div className="timeline-scroll" ref={scrollRef} onScroll={handleScroll}>
+            <div className="timeline-ruler" style={{ width: contentWidth }} onPointerDown={seekOnClick}>
+              {Array.from({ length: Math.ceil(totalDuration / rulerStep(pxPerSecond)) + 5 }).map((_, i) => {
+                const t = i * rulerStep(pxPerSecond);
+                return (
+                  <span key={i} className="ruler-tick" style={{ left: t * pxPerSecond }}>
+                    {fmtRuler(t)}
+                  </span>
+                );
+              })}
+            </div>
 
             <div
-              className="timeline-playhead"
-              style={{ left: playhead * pxPerSecond, height: contentHeight }}
-              aria-label="Playhead"
-            />
+              className="timeline-tracks"
+              style={{ width: contentWidth, height: contentHeight }}
+              onPointerDown={seekOnClick}
+            >
+              {tracks.map((track, trackIndex) => (
+                <TimelineTrack
+                  key={track.id}
+                  track={track}
+                  trackIndex={trackIndex}
+                  contentWidth={contentWidth}
+                  {...trackSharedProps}
+                />
+              ))}
+
+              <div
+                className="timeline-playhead"
+                style={{ left: playhead * pxPerSecond, height: contentHeight }}
+                aria-label="Playhead"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

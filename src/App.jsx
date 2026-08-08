@@ -209,7 +209,9 @@ export default function App() {
         <button className="btn btn-small" disabled={!selectedClip} onClick={removeSelectedClip}>
           🗑 Xoá clip đang chọn
         </button>
-        <span className="dim small">Chọn video để thêm vào timeline. Phase 1.1 hiện chưa hỗ trợ kéo, trim, split hoặc snap.</span>
+        <span className="dim small">
+          Phase 1.2: multi-track + chọn clip (Ctrl/Cmd+click, Shift+click cùng track, Ctrl/Cmd+A, Escape). Chưa hỗ trợ kéo, trim, split, snap.
+        </span>
       </div>
 
       <ExportBar clips={clips} exportState={exportState} onExport={runExport} />
