@@ -42,7 +42,7 @@ export default function App() {
   const selectedClipIds = useTimelineSelector((state) => state.selectedClipIds);
   const addTrack = useTimelineSelector((state) => state.addTrack);
   const addClip = useTimelineSelector((state) => state.addClip);
-  const removeClip = useTimelineSelector((state) => state.removeClip);
+  const removeClips = useTimelineSelector((state) => state.removeClips);
   const updateClip = useTimelineSelector((state) => state.updateClip);
   const selectClip = useTimelineSelector((state) => state.selectClip);
   const setCurrentTime = useTimelineSelector((state) => state.setCurrentTime);
@@ -54,7 +54,10 @@ export default function App() {
 
   const clips = useMemo(() => tracks.flatMap((track) => track.clips), [tracks]);
   const selectedClip = useMemo(
-    () => clips.find((clip) => clip.id === selectedClipIds[0]) || null,
+    () =>
+      selectedClipIds.length === 1
+        ? clips.find((clip) => clip.id === selectedClipIds[0]) || null
+        : null,
     [clips, selectedClipIds]
   );
 
@@ -126,11 +129,15 @@ export default function App() {
     [addClip, addTrack, selectClip]
   );
 
-  const removeSelectedClip = useCallback(() => {
-    if (!selectedClip) return;
-    const removedClip = removeClip(selectedClip.id);
-    if (removedClip?.url) URL.revokeObjectURL(removedClip.url);
-  }, [removeClip, selectedClip]);
+  const removeSelectedClips = useCallback(() => {
+    if (selectedClipIds.length === 0) return;
+
+    const removedClips = removeClips(selectedClipIds);
+
+    removedClips.forEach((clip) => {
+      if (clip.url) URL.revokeObjectURL(clip.url);
+    });
+  }, [selectedClipIds, removeClips]);
 
   const runExport = useCallback(async () => {
     if (clips.length === 0) return;
@@ -206,9 +213,14 @@ export default function App() {
       <Timeline />
 
       <div className="strip-actions">
-        <button className="btn btn-small" disabled={!selectedClip} onClick={removeSelectedClip}>
+        <button className="btn btn-small" disabled={selectedClipIds.length === 0} onClick={removeSelectedClips}>
           🗑 Xoá clip đang chọn
         </button>
+        {selectedClipIds.length > 1 && (
+          <span className="dim small">
+            Đã chọn {selectedClipIds.length} clip
+          </span>
+        )}
         <span className="dim small">Chọn video để thêm vào timeline. Phase 1.1 hiện chưa hỗ trợ kéo, trim, split hoặc snap.</span>
       </div>
 

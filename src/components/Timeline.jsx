@@ -22,7 +22,7 @@ function rulerStep(pxPerSecond) {
 export default function Timeline() {
   const { state, actions, helpers } = useTimeline();
   const { tracks, selectedClipIds, currentTime: playhead, duration: totalDuration, pixelsPerSecond: pxPerSecond } = state;
-  const { setCurrentTime, setZoom, addTrack, removeTrack, selectClip, setViewport } = actions;
+  const { setCurrentTime, setZoom, addTrack, removeTrack, selectClip, toggleClip, clearSelection, setViewport } = actions;
   const { getClipLeft, getClipWidth } = helpers;
   const scrollRef = useRef(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -75,15 +75,33 @@ export default function Timeline() {
     setCurrentTime(Math.max(0, x / pxPerSecond));
   }, [pxPerSecond, setCurrentTime]);
 
+  // Ruler is seek-only: it moves the playhead but never clears the selection.
+  const seekOnRulerClick = (e) => {
+    if (e.button !== 0) return;
+    seekAtPointer(e);
+  };
+
+  // Background (.timeline-tracks) clears the selection on empty space while
+  // seeking. Clip clicks keep their own selection behavior via
+  // handleClipSelection and are not cleared here.
   const seekOnClick = (e) => {
     if (e.button !== 0) return;
+    // Only clear the selection when the click landed on empty timeline space
+    // (not on a clip). Clip clicks keep the playhead-seek but manage their own
+    // selection through handleClipSelection, so they must not be cleared here.
+    if (!e.target.closest?.("[data-clip-id]")) clearSelection();
     seekAtPointer(e);
   };
 
   const handleClipSelection = useCallback((event) => {
     event.stopPropagation();
-    selectClip(event.currentTarget.dataset.clipId, event.metaKey || event.ctrlKey);
-  }, [selectClip]);
+    const clipId = event.currentTarget.dataset.clipId;
+    if (event.metaKey || event.ctrlKey) {
+      toggleClip(clipId);
+    } else {
+      selectClip(clipId);
+    }
+  }, [selectClip, toggleClip]);
 
   const handleRemoveTrack = useCallback((trackId) => {
     const removedClips = removeTrack(trackId);
@@ -141,7 +159,7 @@ export default function Timeline() {
         </div>
 
         <div className="timeline-scroll" ref={scrollRef} onScroll={handleScroll}>
-          <div className="timeline-ruler" style={{ width: contentWidth }} onPointerDown={seekOnClick}>
+          <div className="timeline-ruler" style={{ width: contentWidth }} onPointerDown={seekOnRulerClick}>
             {Array.from({ length: Math.ceil(totalDuration / rulerStep(pxPerSecond)) + 5 }).map((_, i) => {
               const t = i * rulerStep(pxPerSecond);
               return (

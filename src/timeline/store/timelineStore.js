@@ -134,6 +134,25 @@ export const useTimelineStore = create((set) => ({
     return removedClip;
   },
 
+  removeClips: (clipIds) => {
+    let removedClips = [];
+    const idSet = new Set(clipIds);
+    set((state) => {
+      const tracks = state.tracks.map((track) => {
+        const removed = track.clips.filter((clip) => idSet.has(clip.id));
+        if (removed.length === 0) return track;
+        removedClips = removedClips.concat(removed);
+        return { ...track, clips: track.clips.filter((clip) => !idSet.has(clip.id)) };
+      });
+      if (removedClips.length === 0) return state;
+      return {
+        ...withDerivedTimelineState(tracks, state.currentTime),
+        selectedClipIds: state.selectedClipIds.filter((id) => !idSet.has(id)),
+      };
+    });
+    return removedClips;
+  },
+
   updateClip: (clipId, patch) =>
     set((state) => {
       if (!hasClip(state.tracks, clipId)) return state;
@@ -153,6 +172,14 @@ export const useTimelineStore = create((set) => ({
       if (!append) return { selectedClipIds: [clipId] };
       return state.selectedClipIds.includes(clipId)
         ? state
+        : { selectedClipIds: [...state.selectedClipIds, clipId] };
+    }),
+
+  toggleClip: (clipId) =>
+    set((state) => {
+      if (!hasClip(state.tracks, clipId)) return state;
+      return state.selectedClipIds.includes(clipId)
+        ? { selectedClipIds: state.selectedClipIds.filter((id) => id !== clipId) }
         : { selectedClipIds: [...state.selectedClipIds, clipId] };
     }),
 
