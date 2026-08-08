@@ -1,25 +1,59 @@
 # CapCut Lite
 
-Ứng dụng web dựng phim multi-track, chạy hoàn toàn trong trình duyệt (không cần server xử lý video — mọi thứ chạy bằng ffmpeg.wasm ngay trên máy bạn).
+Ứng dụng web dựng phim multi-track, chạy hoàn toàn trong trình duyệt (không cần server xử lý video — export dùng ffmpeg.wasm ngay trên máy bạn).
 
-**Tính năng hiện có:**
-- **Timeline nhiều track**: thêm/xoá track, mỗi track là 1 lớp video độc lập
-- **Clip dạng block** với thumbnail + waveform hiển thị ngay trên timeline
-- **Playhead** chạy xuyên toàn bộ timeline, tua bằng cách bấm/kéo trên thước thời gian
-- **Zoom timeline** (phóng to/thu nhỏ theo pixel/giây)
+**Trạng thái hiện tại: Phase 1.1** — nền tảng timeline + xem trước + overlay + export. Chưa có chỉnh sửa clip tương tác (kéo, trim, split, snap).
+
+---
+
+## Tính năng hiện có
+
+### Timeline & media
+- **Timeline nhiều track**: thêm/xoá track; mỗi track là một lớp video độc lập
+- **Thêm video**: chọn một hoặc nhiều file — clip tự nối tiếp vào cuối track cuối cùng
+- **Clip dạng block** trên timeline (tên file + thời lượng); bấm để chọn (Ctrl/Cmd + bấm để chọn thêm clip khác)
+- **Xoá clip** đang chọn bằng nút "🗑 Xoá clip đang chọn"
+- **Playhead**: bấm trên thước thời gian (ruler) hoặc vùng track để tua
+- **Zoom timeline** (nút "− Zoom" / "+ Zoom"; giữ nguyên điểm giữa vùng đang nhìn)
 - **Cuộn ngang & dọc** khi timeline dài hoặc nhiều track
-- **Kéo-thả clip** để đổi vị trí thời gian, và đổi qua track khác
-- **Trim đầu/cuối clip** bằng cách kéo 2 mép block
-- **Snap** vào playhead và vào mép các clip khác khi kéo/trim
-- **Ghép lớp (layer compositing)** khi xem trước lẫn khi xuất: track thêm sau (nằm dưới trong danh sách track) sẽ đè lên track thêm trước, giống nguyên lý track trong Premiere/CapCut
-- **Ảo hoá render**: chỉ vẽ những clip đang nằm trong vùng nhìn thấy trên timeline, để kéo/cuộn mượt kể cả khi có rất nhiều clip
-- **Chữ overlay** + **phụ đề tự động** (nhận diện giọng nói ngay trong trình duyệt) trên từng clip
-- Xuất ra 1 file video mp4 duy nhất, đã ghép đúng lớp/đúng thời điểm
+- **Ảo hoá render ngang**: chỉ vẽ clip nằm trong vùng cuộn (cộng buffer) — giúp cuộn mượt khi có nhiều clip
 
-**Giới hạn đã biết (MVP):**
-- Chưa có transition (crossfade) giữa các clip — phần này tạm bỏ để đổi lấy kiến trúc multi-track; sẽ làm lại sau nếu cần
-- Xem trước lúc **phát (Play)** dùng nhiều thẻ `<video>` đồng bộ bằng 1 đồng hồ ảo — có thể lệch nhẹ vài chục mili-giây giữa các track khi phát liên tục (khi **tua/kéo playhead thì luôn chính xác tuyệt đối**, vì lúc đó video được set thẳng vào đúng thời điểm)
-- Không giới hạn cứng số track/clip, nhưng nhiều track + video dài sẽ khiến bước xuất video (ghép lớp bằng ffmpeg) chạy chậm hơn
+### Xem trước & phát
+- **Ghép lớp (layer compositing)**: mỗi track một thẻ `<video>` chồng lên nhau; track có index cao hơn (hàng thấp hơn trong timeline) đè lên track index thấp hơn
+- **Phát / tạm dừng** toàn timeline bằng nút "▶ Phát" / "⏸ Tạm dừng"
+- **Overlay text** hiển thị trên khung xem trước theo thời điểm playhead
+
+### Overlay & export
+- **Chữ overlay thủ công** trên từng clip (nội dung, thời gian, vị trí, cỡ chữ, màu)
+- **Phụ đề tự động** bằng Whisper chạy trong trình duyệt (`Xenova/whisper-tiny`, mặc định tiếng Việt)
+- **Xuất MP4** (1280×720, 30fps): ghép đúng lớp và đúng thời điểm; trộn audio mọi clip (`adelay` + `amix`)
+
+---
+
+## Chưa có (Phase 1.1)
+
+Các mục sau **chưa implement** — data model đã có sẵn `trimIn`/`trimOut`/`start` nhưng chưa có UI tương tác:
+
+- Kéo-thả clip (đổi vị trí thời gian / chuyển track)
+- Trim đầu/cuối clip bằng kéo mép block
+- Snap vào playhead hoặc mép clip khác
+- Split clip tại playhead
+- Thumbnail + waveform trên block clip
+- Transition (crossfade) giữa các clip
+- Undo/redo, lưu/tải project, phím tắt
+- Chỉnh âm lượng / mute / solo từng clip hoặc track
+- Track ẩn / khoá (lock/hide)
+
+---
+
+## Giới hạn đã biết
+
+- **Xem trước khi phát (Play)** dùng nhiều thẻ `<video>` đồng bộ bằng `requestAnimationFrame` — có thể lệch nhẹ vài chục ms giữa các track khi phát liên tục. Khi **tua playhead (scrub)** thì preview set thẳng `currentTime` nên chính xác theo từng track
+- **Scrub không tự dừng playback** — nếu đang phát mà bấm/kéo playhead, video vẫn tiếp tục ở trạng thái "đang phát"
+- Export cố định **720p / preset ultrafast**; nhiều track + clip dài làm bước export chậm (mỗi clip render riêng rồi mới ghép lớp)
+- Audio mọi clip trộn cùng mức — chưa có volume per clip/track
+- State chỉ trong memory — refresh trang mất toàn bộ project
+- Không giới hạn cứng số track/clip, nhưng tài nguyên trình duyệt có giới hạn thực tế
 
 ---
 
@@ -33,7 +67,6 @@ Tải tại https://nodejs.org (bản LTS). Kiểm tra: `node --version`
 cd capcut-lite
 npm install
 ```
-Nếu gặp lỗi `externally-managed-environment` khi cài (thường trên macOS) — lỗi đó là của pip/Python, không liên quan tới `npm`, có thể bỏ qua ở đây.
 
 ### Bước 3: Chạy ứng dụng
 ```
@@ -41,39 +74,86 @@ npm run dev
 ```
 Mở link hiện ra (thường `http://localhost:5173`) bằng Chrome/Edge.
 
+---
+
 ## Cách dùng
 
-1. **Thêm video**: bấm "+ Thêm video" hoặc để trống nút này chọn nhiều file cùng lúc — video sẽ tự nối tiếp vào cuối track hiện tại
-2. **Chọn clip**: bấm vào 1 block trên timeline — clip được chọn sẽ có viền sáng, panel chữ overlay bên phải sẽ hiện thông tin của clip đó
-3. **Di chuyển clip**: kéo vào giữa block để đổi vị trí thời gian; kéo lên/xuống để chuyển sang track khác — sẽ tự "hít" (snap) vào playhead hoặc mép clip khác khi đến gần
-4. **Trim clip**: kéo mép trái/phải của block để cắt bớt đầu/cuối
-5. **Zoom & cuộn**: dùng nút "− Zoom" / "+ Zoom" ở góc trên timeline; cuộn chuột ngang/dọc như bình thường để duyệt timeline dài hoặc nhiều track
-6. **Thêm/xoá track**: "+ Thêm track" ở góc trên; nút "×" cạnh tên track để xoá (xoá track sẽ xoá luôn các clip trên track đó)
-7. **Tua/scrub**: bấm hoặc kéo trên thước thời gian (ruler) phía trên các track để di chuyển playhead — khung xem trước cập nhật ngay lập tức, chính xác theo từng track
-8. **Phát thử**: bấm "▶ Phát" ở dưới khung xem trước để xem thử toàn bộ timeline (có ghép lớp các track)
-9. **Chữ overlay / phụ đề tự động**: chọn 1 clip, dùng panel bên phải — giống bản trước
-10. **Xuất video**: bấm "Xuất video" ở thanh dưới cùng — lần đầu sẽ tải ffmpeg.wasm + font + (nếu dùng phụ đề tự động) model nhận diện giọng nói
+1. **Thêm video**: bấm "+ Thêm video", chọn một hoặc nhiều file — clip nối tiếp vào cuối track cuối cùng (tự tạo "Track 1" nếu timeline trống)
+2. **Chọn clip**: bấm block trên timeline — viền sáng; panel "Chữ overlay / Phụ đề" bên phải hiện thông tin clip đó
+3. **Zoom & cuộn**: nút "− Zoom" / "+ Zoom" trên timeline; cuộn chuột ngang/dọc để duyệt
+4. **Thêm/xoá track**: "+ Thêm track"; nút "×" cạnh tên track để xoá (xoá luôn clip trên track đó)
+5. **Tua (scrub)**: bấm trên ruler hoặc vùng track để di chuyển playhead — khung xem trước cập nhật ngay
+6. **Phát thử**: bấm "▶ Phát" dưới khung xem trước
+7. **Chữ overlay / phụ đề tự động**: chọn clip → panel bên phải → "+ Thêm chữ" hoặc "✨ Tự động tạo phụ đề"
+8. **Xoá clip**: chọn clip → "🗑 Xoá clip đang chọn"
+9. **Xuất video**: bấm "Xuất video" ở thanh dưới — lần đầu tải ffmpeg.wasm; lần đầu dùng phụ đề tự động tải thêm model Whisper; export có overlay chữ tải thêm font Noto Sans
+
+---
 
 ## Ghi chú kỹ thuật
 
-- **Timeline model + store**: `src/timeline/model.js` chứa các quy tắc thuần (độ dài clip/timeline, clamp zoom và chuẩn hoá trim); `src/timeline/timelineStore.js` là nguồn state tập trung cho track, clip, selection, playhead, playback và zoom. Nhờ vậy UI/export không còn tự tính lại luật dữ liệu ở nhiều nơi.
-- **Playhead / scrub**: có thể kéo liên tục trên thước hoặc vùng track để tua chính xác; mọi lần seek tự dừng phát để preview luôn đồng bộ.
-- **Zoom theo ngữ cảnh**: scale được lưu ở store và khi zoom, điểm giữa vùng timeline đang nhìn được giữ nguyên thay vì nhảy về đầu timeline.
-- **Kiến trúc dữ liệu**: mỗi clip có `trackId` (thuộc track nào), `sourceStart`/`sourceEnd` (đoạn cắt trong file gốc), và `timelineStart` (vị trí trên timeline chung). Trim chỉ đổi `sourceStart`/`sourceEnd`; kéo-thả chỉ đổi `timelineStart`/`trackId`.
-- **Ghép lớp khi export**: mỗi track được dựng thành 1 lớp trong suốt (kênh alpha) trải dài toàn bộ timeline bằng kỹ thuật `setpts` (dịch thời điểm clip) + `overlay=enable=between(t,...)` (chỉ hiện trong đúng khoảng thời gian của clip). Sau đó các lớp track được chồng lên nhau từ dưới lên trên (`tracks[0]` là track dưới cùng) lên 1 nền đen. Audio của mọi clip được trễ đúng thời điểm (`adelay`) rồi trộn lại (`amix`).
-- **Waveform**: được tính 1 lần cho mỗi file gốc (giải mã audio bằng Web Audio API, lấy mẫu biên độ thưa ~8 mẫu/giây) rồi cache lại — nhiều clip cắt từ cùng 1 file sẽ dùng chung dữ liệu waveform, chỉ hiển thị đúng đoạn tương ứng.
-- **Thumbnail**: chụp 1 khung hình ở giây thứ 0.1 của mỗi file gốc, cache lại tương tự waveform.
-- **Ảo hoá (virtualization)**: `Timeline.jsx` chỉ render các clip có phần giao với vùng đang cuộn tới (`scrollLeft` → `scrollLeft + clientWidth`, cộng thêm buffer) — clip ngoài vùng nhìn thấy không được tạo DOM node, giúp kéo/cuộn mượt dù timeline có hàng trăm clip.
-- **Font chữ overlay**: xem `src/ffmpegEngine.js`, hằng số `FONT_URL`. Nếu lỗi tải, export vẫn chạy nhưng bỏ qua chữ overlay.
-- **Model phụ đề tự động**: xem `src/whisperEngine.js`, hằng số `WHISPER_MODEL` (mặc định `Xenova/whisper-tiny`, có thể đổi sang `base`/`small` để chính xác hơn).
-- Cấu hình trong `vite.config.js` bật sẵn header COOP/COEP — bắt buộc để ffmpeg.wasm hoạt động.
+### Kiến trúc
+```
+src/
+├── App.jsx                 # Shell: import media, playback, export
+├── components/
+│   ├── Timeline.jsx        # Track lanes, ruler, playhead, virtualization
+│   ├── TimelineClip.jsx    # Block clip (chỉ hiển thị, chưa drag/trim)
+│   ├── Stage.jsx           # Preview multi-track + overlay text
+│   ├── OverlayPanel.jsx    # UI overlay + Whisper captions
+│   └── ExportBar.jsx
+├── timeline/
+│   ├── store/timelineStore.js   # Zustand: tracks, clips, playhead, zoom, selection
+│   ├── engine/timelineEngine.js # time ↔ pixels, clip geometry
+│   ├── hooks/useTimeline.js     # Hook bọc store + helpers
+│   ├── utils/time.js            # clamp, getTimelineDuration
+│   └── constants.js
+├── ffmpegEngine.js         # Export pipeline (ffmpeg.wasm)
+└── whisperEngine.js        # ASR phụ đề (Transformers.js)
+```
 
-## Ý tưởng mở rộng tiếp theo
+### Data model clip (trong store)
+Mỗi clip lưu:
+- `trackId` — thuộc track nào
+- `start` — vị trí trên timeline (giây)
+- `duration` — độ dài hiển thị trên timeline
+- `trimIn` / `trimOut` — đoạn cắt trong file gốc (hiện chỉ set lúc import, chưa chỉnh qua UI)
+- `overlays` — danh sách chữ overlay
 
-- Transition (crossfade) giữa các clip liền kề trên cùng track
-- Nhạc nền riêng / chỉnh âm lượng từng clip, từng track (mute/solo)
-- Track ẩn/khoá (lock/hide) để không bị chỉnh nhầm khi làm việc trên track khác
-- Kéo-thả nhiều clip cùng lúc (multi-select)
-- Xuất bản xem trước độ phân giải thấp để duyệt nhanh hơn, rồi mới xuất bản full khi ưng ý
+Khi export, `App.jsx` map sang `timelineStart`, `sourceStart`, `sourceEnd` cho `ffmpegEngine.js`.
 
-Cứ quay lại nhờ mình khi muốn làm tiếp phần nào.
+### Ghép lớp khi export
+Mỗi track → một lớp trong suốt (alpha) trải toàn timeline bằng `setpts` + `overlay=enable=between(t,...)`. Các track chồng từ dưới lên: `tracks[0]` dưới cùng, track cuối trên cùng. Audio mọi clip trễ đúng thời điểm (`adelay`) rồi trộn (`amix`).
+
+### Zoom
+Scale lưu trong store; khi zoom, điểm giữa viewport timeline được giữ cố định thay vì nhảy về đầu.
+
+### Virtualization
+`Timeline.jsx` lọc clip theo `scrollLeft ± buffer` — clip ngoài vùng nhìn không render DOM node.
+
+### Font overlay & Whisper
+- Font: `FONT_URL` trong `src/ffmpegEngine.js` — lỗi tải font thì export bỏ qua chữ overlay
+- Model ASR: `WHISPER_MODEL` trong `src/whisperEngine.js` (mặc định `Xenova/whisper-tiny`; có thể đổi sang `base`/`small`)
+
+### Vite / ffmpeg.wasm
+`vite.config.js` bật header COOP/COEP — bắt buộc cho SharedArrayBuffer khi chạy ffmpeg.wasm.
+
+---
+
+## Roadmap (Phase tiếp theo)
+
+**Phase 1.2 — Editor cơ bản**
+- Kéo-thả clip (đổi `start` + `trackId`)
+- Trim bằng kéo mép block (cập nhật `trimIn`/`trimOut`/`duration`)
+- Snap playhead + mép clip
+- Scrub tự dừng playback
+- `timeline/model.js` — logic thuần (clamp, snap, collision)
+
+**Sau Phase 1.2**
+- Thumbnail + waveform trên clip
+- Split clip tại playhead
+- Transition (crossfade)
+- Volume / mute / solo; track audio riêng
+- Track lock/hide; multi-select + kéo nhiều clip
+- Export preview độ phân giải thấp; chọn preset/resolution
+- Undo/redo; lưu/tải project (JSON + IndexedDB)

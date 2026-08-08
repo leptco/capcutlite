@@ -6,7 +6,7 @@ function fmt(t) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-const TimelineClip = memo(function TimelineClip({ clip, left, width, selected, onClick }) {
+const TimelineClip = memo(function TimelineClip({ clip, left, width, selected, onSelect }) {
   const isAudioOnly = clip.type === "audio";
 
   return (
@@ -14,7 +14,8 @@ const TimelineClip = memo(function TimelineClip({ clip, left, width, selected, o
       className={`tl-clip ${selected ? "selected" : ""} ${isAudioOnly ? "tl-clip-audio" : ""}`}
       style={{ left, width }}
       data-clip-id={clip.id}
-      onClick={onClick}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => onSelect?.(event, clip)}
       title={clip.name}
     >
       <div className="tl-clip-label">

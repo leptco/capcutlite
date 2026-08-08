@@ -11,4 +11,8 @@ export const TRACK_TYPES = Object.freeze({
   VIDEO: "video",
   AUDIO: "audio",
   TEXT: "text",
+  SUBTITLE: "subtitle",
+  OVERLAY: "overlay",
 });
+
+export const TRACK_TYPE_VALUES = Object.freeze(Object.values(TRACK_TYPES));

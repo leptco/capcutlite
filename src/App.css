@@ -370,6 +370,20 @@
   color: var(--text-dim);
 }
 
+.track-label-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.track-type-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
 .track-remove {
   border: none;
   background: transparent;
@@ -411,15 +425,38 @@
   position: relative;
 }
 
+.timeline-track-row {
+  position: absolute;
+  left: 0;
+}
+
+.timeline-track-row.track-row-alt .track-lane {
+  background: #191b20;
+}
+
 .track-lane {
   position: absolute;
+  inset: 0;
   left: 0;
   border-bottom: 1px solid var(--line);
   background: #1a1c22;
 }
 
-.track-lane:nth-child(even) {
-  background: #191b20;
+.track-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.timeline-empty {
+  padding: 24px 20px;
+  text-align: center;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
 }
 
 .timeline-playhead {
