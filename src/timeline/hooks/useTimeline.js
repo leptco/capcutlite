@@ -30,6 +30,7 @@ export function useTimeline() {
         tracks: timeline.tracks,
         selectedClipIds: timeline.selectedClipIds,
         viewport: timeline.viewport,
+        aspectRatio: timeline.aspectRatio,
       },
       actions: {
         setCurrentTime: timeline.setCurrentTime,
@@ -43,6 +44,7 @@ export function useTimeline() {
         selectClip: timeline.selectClip,
         toggleClip: timeline.toggleClip,
         clearSelection: timeline.clearSelection,
+        setAspectRatio: timeline.setAspectRatio,
         setViewport: timeline.setViewport,
       },
       helpers: {

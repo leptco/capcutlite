@@ -57,6 +57,7 @@ export const useTimelineStore = create((set) => ({
   tracks: [],
   selectedClipIds: [],
   viewport: { ...DEFAULT_VIEWPORT },
+  aspectRatio: "16:9",
 
   setCurrentTime: (time) =>
     set((state) => {
@@ -184,6 +185,13 @@ export const useTimelineStore = create((set) => ({
     }),
 
   clearSelection: () => set({ selectedClipIds: [] }),
+
+  setAspectRatio: (aspectRatio) =>
+    set((state) => {
+      if (aspectRatio !== "16:9" && aspectRatio !== "9:16") return state;
+      if (aspectRatio === state.aspectRatio) return state;
+      return { aspectRatio };
+    }),
 
   setViewport: (viewport) =>
     set((state) => {

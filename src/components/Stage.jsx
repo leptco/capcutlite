@@ -9,7 +9,7 @@ function findActiveClip(clips, trackId, playhead) {
   );
 }
 
-export default function Stage({ tracks, clips, playhead, isPlaying }) {
+export default function Stage({ tracks, clips, playhead, isPlaying, aspectRatio = "16:9" }) {
   const videoRefs = useRef({});
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function Stage({ tracks, clips, playhead, isPlaying }) {
   });
 
   return (
-    <div className="stage">
+    <div className={`stage ${aspectRatio === "9:16" ? "stage-portrait" : ""}`}>
       {tracks.map((track) => (
         <video
           key={track.id}

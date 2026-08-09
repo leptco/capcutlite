@@ -52,7 +52,7 @@ Mở link hiện ra (thường `http://localhost:5173`) bằng Chrome/Edge.
 7. **Tua/scrub**: bấm hoặc kéo trên thước thời gian (ruler) phía trên các track để di chuyển playhead — khung xem trước cập nhật ngay lập tức, chính xác theo từng track
 8. **Phát thử**: bấm "▶ Phát" ở dưới khung xem trước để xem thử toàn bộ timeline (có ghép lớp các track)
 9. **Chữ overlay / phụ đề tự động**: chọn 1 clip, dùng panel bên phải — giống bản trước
-10. **Xuất video**: bấm "Xuất video" ở thanh dưới cùng — lần đầu sẽ tải ffmpeg.wasm + font + (nếu dùng phụ đề tự động) model nhận diện giọng nói
+10. **Xuất video**: bấm "Xuất video" ở thanh dưới cùng — lần đầu sẽ nạp ffmpeg.wasm + font (từ file cục bộ trong `public/ffmpeg`, **không phụ thuộc CDN**, được sao chép tự động bởi `npm install`) + (nếu dùng phụ đề tự động) model nhận diện giọng nói
 
 ## Ghi chú kỹ thuật
 
@@ -64,9 +64,11 @@ Mở link hiện ra (thường `http://localhost:5173`) bằng Chrome/Edge.
 - **Waveform**: được tính 1 lần cho mỗi file gốc (giải mã audio bằng Web Audio API, lấy mẫu biên độ thưa ~8 mẫu/giây) rồi cache lại — nhiều clip cắt từ cùng 1 file sẽ dùng chung dữ liệu waveform, chỉ hiển thị đúng đoạn tương ứng.
 - **Thumbnail**: chụp 1 khung hình ở giây thứ 0.1 của mỗi file gốc, cache lại tương tự waveform.
 - **Ảo hoá (virtualization)**: `Timeline.jsx` chỉ render các clip có phần giao với vùng đang cuộn tới (`scrollLeft` → `scrollLeft + clientWidth`, cộng thêm buffer) — clip ngoài vùng nhìn thấy không được tạo DOM node, giúp kéo/cuộn mượt dù timeline có hàng trăm clip.
-- **Font chữ overlay**: xem `src/ffmpegEngine.js`, hằng số `FONT_URL`. Nếu lỗi tải, export vẫn chạy nhưng bỏ qua chữ overlay.
+  - **Font chữ overlay**: font Noto Sans Regular được bundle cục bộ tại `public/fonts/NotoSans-Regular.ttf` (tải tĩnh lúc build, không bao giờ fetch từ CDN/GitHub tại runtime) và phục vụ từ `/fonts/NotoSans-Regular.ttf` — trao cho `FFmpeg` qua hằng số `FONT_URL` trong `src/ffmpegEngine.js`. Nếu font tải lỗi và có overlay chữ, export sẽ dừng và báo lỗi rõ ràng (giai đoạn "Tải font chữ overlay") thay vì bỏ qua chữ overlay im lặng.
 - **Model phụ đề tự động**: xem `src/whisperEngine.js`, hằng số `WHISPER_MODEL` (mặc định `Xenova/whisper-tiny`, có thể đổi sang `base`/`small` để chính xác hơn).
 - Cấu hình trong `vite.config.js` bật sẵn header COOP/COEP — bắt buộc để ffmpeg.wasm hoạt động.
+- **ffmpeg.wasm cục bộ (không CDN)**: `npm install` tự động chạy `scripts/copy-ffmpeg-assets.mjs` để sao chép `ffmpeg-core.js`/`.wasm` + worker của `@ffmpeg/ffmpeg` từ `node_modules` vào `public/ffmpeg`. Engine (`src/ffmpegEngine.js`) load 3 file này bằng đường dẫn cùng-origin — nên không bao giờ "treo 120s vì CDN chặn". `npm run build`/`dev` cũng chạy bước sao chép này trước khi build để luôn đủ asset.
+- **Lỗi không còn im lặng**: mọi bước ffmpeg (khởi tạo, render clip, ghép lớp, đọc kết quả) đều có timeout; nếu thất bại, thông báo lỗi kèm coreURL/wasmURL/workerURL + thời gian chờ + dòng log lỗi ffmpeg gần nhất. Nếu khởi tạo bị lỗi (ví dụ file core bị hỏng), bản thân ffmpeg được terminate và lần gọi sau sẽ khởi tạo lại từ đầu — không còn "kẹt" ở trạng thái loading chết chóc.
 
 ## Ý tưởng mở rộng tiếp theo
 

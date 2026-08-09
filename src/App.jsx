@@ -46,8 +46,15 @@ export default function App() {
   const updateClip = useTimelineSelector((state) => state.updateClip);
   const selectClip = useTimelineSelector((state) => state.selectClip);
   const setCurrentTime = useTimelineSelector((state) => state.setCurrentTime);
+  const aspectRatio = useTimelineSelector((state) => state.aspectRatio);
+  const setAspectRatio = useTimelineSelector((state) => state.setAspectRatio);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [exportState, setExportState] = useState({ status: "idle", message: "", url: null });
+  const [exportState, setExportState] = useState({
+    status: "idle",
+    message: "",
+    url: null,
+    progress: null,
+  });
   const fileInputRef = useRef(null);
   const currentTimeRef = useRef(currentTime);
   const exportUrlRef = useRef(null);
@@ -143,7 +150,7 @@ export default function App() {
     if (clips.length === 0) return;
     setIsPlaying(false);
     replaceExportUrl(null);
-    setExportState({ status: "working", message: "Đang khởi động bộ xử lý video...", url: null });
+    setExportState({ status: "working", message: "Đang khởi động bộ xử lý video...", url: null, progress: 0 });
     try {
       const exportClips = clips.map((clip) => ({
         ...clip,
@@ -151,15 +158,24 @@ export default function App() {
         sourceStart: clip.trimIn,
         sourceEnd: clip.trimIn + clip.duration,
       }));
-      const blob = await exportTimeline(tracks, exportClips, (message) =>
-        setExportState((previous) => ({ ...previous, message }))
+      const blob = await exportTimeline(
+        tracks,
+        exportClips,
+        aspectRatio,
+        (message) => setExportState((previous) => ({ ...previous, message })),
+        (progress) => setExportState((previous) => ({ ...previous, progress }))
       );
       const url = URL.createObjectURL(blob);
       replaceExportUrl(url);
-      setExportState({ status: "done", message: "Hoàn tất!", url });
+      setExportState({ status: "done", message: "Hoàn tất!", url, progress: 100 });
     } catch (error) {
       console.error(error);
-      setExportState({ status: "error", message: String(error?.message || error), url: null });
+      setExportState({
+        status: "error",
+        message: String(error?.message || error),
+        url: null,
+        progress: null,
+      });
     }
   }, [clips, replaceExportUrl, tracks]);
 
@@ -173,6 +189,24 @@ export default function App() {
         <button className="btn btn-accent" onClick={() => fileInputRef.current?.click()}>
           + Thêm video
         </button>
+        <div className="ratio-control" role="group" aria-label="Aspect Ratio">
+          <button
+            type="button"
+            className={`ratio-option ${aspectRatio === "16:9" ? "active" : ""}`}
+            onClick={() => setAspectRatio("16:9")}
+          >
+            <span className="ratio-value">16:9</span>
+            <span className="ratio-label">Desktop</span>
+          </button>
+          <button
+            type="button"
+            className={`ratio-option ${aspectRatio === "9:16" ? "active" : ""}`}
+            onClick={() => setAspectRatio("9:16")}
+          >
+            <span className="ratio-value">9:16</span>
+            <span className="ratio-label">TikTok / Reels</span>
+          </button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -189,7 +223,7 @@ export default function App() {
       <main className="app-main">
         <div className="main-columns">
           <div className="stage-column">
-            <Stage tracks={tracks} clips={clips} playhead={currentTime} isPlaying={isPlaying} />
+            <Stage tracks={tracks} clips={clips} playhead={currentTime} isPlaying={isPlaying} aspectRatio={aspectRatio} />
             <div className="transport-bar">
               <button
                 className="btn btn-accent btn-small"

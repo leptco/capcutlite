@@ -2,10 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // ffmpeg.wasm cần các header COOP/COEP để dùng SharedArrayBuffer khi chạy multi-thread.
-// Cấu hình dưới đây bật sẵn cho server dev.
+// Bật cho cả server dev lẫn vite preview (bản build nếu deploy lên host khác phải tự bật).
 export default defineConfig({
   plugins: [react()],
-  esolve: {
+  resolve: {
     alias: {
       "onnxruntime-node": "onnxruntime-web",
     },
@@ -15,6 +15,12 @@ export default defineConfig({
     exclude: ["onnxruntime-node"],
   },
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
+  preview: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
