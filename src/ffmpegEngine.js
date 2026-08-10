@@ -300,14 +300,23 @@ function extOf(filename) {
   return dot >= 0 ? filename.slice(dot) : ".mp4";
 }
 
-const EXPORT_DIMENSIONS = {
-  "16:9": { width: 1280, height: 720 },
-  "9:16": { width: 720, height: 1280 },
+const EXPORT_RESOLUTIONS = {
+  "16:9": {
+    "720p": { width: 1280, height: 720, label: "1280 × 720 (720p)" },
+    "1080p": { width: 1920, height: 1080, label: "1920 × 1080 (1080p)" },
+  },
+  "9:16": {
+    "720p": { width: 720, height: 1280, label: "720 × 1280 (720p)" },
+    "1080p": { width: 1080, height: 1920, label: "1080 × 1920 (1080p)" },
+  },
 };
 
-function resolveDimensions(aspectRatio) {
-  return EXPORT_DIMENSIONS[aspectRatio] || EXPORT_DIMENSIONS["16:9"];
+function resolveDimensions(aspectRatio, resolution = "720p") {
+  const entry = EXPORT_RESOLUTIONS[aspectRatio]?.[resolution];
+  return entry || EXPORT_RESOLUTIONS["16:9"]["720p"];
 }
+
+export { EXPORT_RESOLUTIONS, resolveDimensions };
 
 /**
  * Cắt 1 clip theo sourceStart/sourceEnd, chuẩn hoá độ phân giải/fps,
@@ -326,11 +335,14 @@ async function renderClip(ffmpeg, clip, useFont, onStatus, { width, height }) {
     `Ghi file "${clip.name}"`
   );
 
+  // Preserve source color characteristics during per-clip rendering.
+  // Use explicit color matrix in scale to avoid implicit conversions.
   const filters = [
     `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
     `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
     "setsar=1",
     "fps=30",
+    "format=yuv420p",
   ];
   if (useFont) filters.push(...buildDrawtextFilters(clip.overlays));
 
@@ -343,7 +355,12 @@ async function renderClip(ffmpeg, clip, useFont, onStatus, { width, height }) {
       "-vf", filters.join(","),
       "-r", "30",
       "-c:v", "libx264",
-      "-preset", "ultrafast",
+      // Clip trung gian được mã hoá lại lần 2 ở bước ghép lớp; dùng CRF thấp
+      // (16) + preset veryfast để tối đa chất lượng trên con đường 2 lần encode.
+      "-preset", "veryfast",
+      "-crf", "16",
+      "-pix_fmt", "yuv420p",
+      // Removed color metadata flags - preserve source characteristics
       "-c:a", "aac",
       "-ar", "44100",
       "-ac", "2",
@@ -366,7 +383,7 @@ async function renderClip(ffmpeg, clip, useFont, onStatus, { width, height }) {
  * tracks: [{ id, name }]  (thứ tự mảng = thứ tự lớp, phần tử cuối ở trên cùng)
  * clips: [{ id, trackId, file, name, sourceStart, sourceEnd, timelineStart, overlays }]
  */
-export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStatus, onProgress) {
+export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStatus, onProgress, resolution = "720p") {
   if (clips.length === 0) throw new Error("Chưa có clip nào trên timeline.");
 
   // Bắt đầu 1 lần xuất mới: xoá log cũ, cắm sink progress cho lần xuất này.
@@ -401,7 +418,7 @@ export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStat
       ? await ensureFont(ffmpeg, onStatus)
       : false;
 
-    const { width, height } = resolveDimensions(aspectRatio);
+    const { width, height } = resolveDimensions(aspectRatio, resolution);
 
     const totalDuration = clips.reduce(
       (max, c) => Math.max(max, c.timelineStart + (c.sourceEnd - c.sourceStart)),
@@ -427,6 +444,7 @@ export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStat
   const trackLabels = [];
   tracks.forEach((track, tIdx) => {
     const base = `tb${tIdx}_0`;
+    // Create black background - color filter does not support metadata options
     filterParts.push(
       `color=c=black@0.0:s=${width}x${height}:d=${totalDuration.toFixed(3)}:r=30,format=yuva420p[${base}]`
     );
@@ -437,8 +455,9 @@ export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStat
 
     trackClips.forEach((clip, ci) => {
       const shifted = `tb${tIdx}_ov${ci}`;
+      // Position clip on timeline with alpha for overlay composition
       filterParts.push(
-        `[${clip.inputIndex}:v]setpts=PTS-STARTPTS+${clip.timelineStart.toFixed(3)}/TB[${shifted}]`
+        `[${clip.inputIndex}:v]setpts=PTS-STARTPTS+${clip.timelineStart.toFixed(3)}/TB,format=yuva420p[${shifted}]`
       );
       const len = clip.sourceEnd - clip.sourceStart;
       const next = `tb${tIdx}_${ci + 1}`;
@@ -453,7 +472,9 @@ export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStat
   });
 
   // 3) chồng các track lên 1 nền đen, từ dưới (tracks[0]) lên trên
-  filterParts.push(`color=c=black:s=${width}x${height}:d=${totalDuration.toFixed(3)}:r=30[canvas0]`);
+  filterParts.push(
+    `color=c=black:s=${width}x${height}:d=${totalDuration.toFixed(3)}:r=30[canvas0]`
+  );
   let prevCanvas = "canvas0";
   trackLabels.forEach((label, i) => {
     const next = `canvas${i + 1}`;
@@ -493,7 +514,12 @@ export async function exportTimeline(tracks, clips, aspectRatio = "16:9", onStat
         "-map", `[${finalAudio}]`,
         "-t", totalDuration.toFixed(3),
         "-c:v", "libx264",
-        "-preset", "ultrafast",
+      // CRF 18 + veryfast: cân bằng chất lượng/tốc độ khá tốt trên wasm; trước
+      // đây dùng ultrafast + CRF mặc định (23) khiến video bị mờ/nhạt do bị nén
+      // 2 lần (clip trung gian → ghép lớp).
+        "-preset", "veryfast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "output.mp4",
       ],

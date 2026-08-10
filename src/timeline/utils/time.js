@@ -14,9 +14,15 @@ export function getClipEnd(clip) {
 }
 
 export function getTimelineDuration(tracks, minimum = DEFAULT_DURATION) {
-  return tracks.reduce(
-    (latestEnd, track) =>
-      track.clips.reduce((end, clip) => Math.max(end, getClipEnd(clip)), latestEnd),
-    minimum
-  );
+  let maxEnd = 0;
+  for (const track of tracks) {
+    for (const clip of track.clips) {
+      const end = getClipEnd(clip);
+      if (end > maxEnd) {
+        maxEnd = end;
+      }
+    }
+  }
+  // Only use minimum for empty timeline; otherwise use actual max end time
+  return maxEnd > 0 ? maxEnd : minimum;
 }

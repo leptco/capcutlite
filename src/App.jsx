@@ -3,6 +3,7 @@ import Timeline from "./components/Timeline.jsx";
 import Stage from "./components/Stage.jsx";
 import OverlayPanel from "./components/OverlayPanel.jsx";
 import ExportBar from "./components/ExportBar.jsx";
+import ExportSettingsModal from "./components/ExportSettingsModal.jsx";
 import { exportTimeline } from "./ffmpegEngine.js";
 import { useTimelineSelector } from "./timeline/hooks/useTimeline.js";
 import { useTimelineStore } from "./timeline/store/timelineStore.js";
@@ -49,12 +50,7 @@ export default function App() {
   const aspectRatio = useTimelineSelector((state) => state.aspectRatio);
   const setAspectRatio = useTimelineSelector((state) => state.setAspectRatio);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [exportState, setExportState] = useState({
-    status: "idle",
-    message: "",
-    url: null,
-    progress: null,
-  });
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const fileInputRef = useRef(null);
   const currentTimeRef = useRef(currentTime);
   const exportUrlRef = useRef(null);
@@ -99,6 +95,10 @@ export default function App() {
   }, []);
 
   useEffect(() => () => replaceExportUrl(null), [replaceExportUrl]);
+
+  const handleExportStart = useCallback(() => {
+    setIsExportModalOpen(true);
+  }, []);
 
   const addFiles = useCallback(
     async (fileList) => {
@@ -146,38 +146,97 @@ export default function App() {
     });
   }, [selectedClipIds, removeClips]);
 
-  const runExport = useCallback(async () => {
-    if (clips.length === 0) return;
-    setIsPlaying(false);
-    replaceExportUrl(null);
-    setExportState({ status: "working", message: "Đang khởi động bộ xử lý video...", url: null, progress: 0 });
-    try {
-      const exportClips = clips.map((clip) => ({
-        ...clip,
-        timelineStart: clip.start,
-        sourceStart: clip.trimIn,
-        sourceEnd: clip.trimIn + clip.duration,
-      }));
-      const blob = await exportTimeline(
-        tracks,
-        exportClips,
-        aspectRatio,
-        (message) => setExportState((previous) => ({ ...previous, message })),
-        (progress) => setExportState((previous) => ({ ...previous, progress }))
-      );
+  const writeExportBlob = useCallback(
+    async (blob, fileHandle, filename) => {
+      if (fileHandle) {
+        try {
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return;
+        } catch (writeError) {
+          console.error("[Export] FileSystem write failed", writeError);
+        }
+      }
+
       const url = URL.createObjectURL(blob);
-      replaceExportUrl(url);
-      setExportState({ status: "done", message: "Hoàn tất!", url, progress: 100 });
-    } catch (error) {
-      console.error(error);
-      setExportState({
-        status: "error",
-        message: String(error?.message || error),
-        url: null,
-        progress: null,
-      });
-    }
-  }, [clips, replaceExportUrl, tracks]);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    []
+  );
+
+  const runExport = useCallback(
+    async (options = {}) => {
+      const {
+        aspectRatio: exportAspectRatio = aspectRatio,
+        resolution = "720p",
+        filename: exportFilename = "capcut-lite-export.mp4",
+        fileHandle,
+        saveLocation,
+        locationLabel,
+        onProgress,
+        onStatus,
+        onComplete,
+      } = options;
+
+      if (clips.length === 0) return;
+      setIsPlaying(false);
+      replaceExportUrl(null);
+
+      try {
+        const exportClips = clips.map((clip) => ({
+          ...clip,
+          timelineStart: clip.start,
+          sourceStart: clip.trimIn,
+          sourceEnd: clip.trimIn + clip.duration,
+        }));
+        const blob = await exportTimeline(
+          tracks,
+          exportClips,
+          exportAspectRatio,
+          (message) => {
+            if (onStatus) onStatus(message);
+          },
+          (progress) => {
+            if (onProgress) onProgress(progress);
+          },
+          resolution
+        );
+
+        const normalizedFilename = exportFilename.endsWith(".mp4")
+          ? exportFilename
+          : `${exportFilename}.mp4`;
+
+        await writeExportBlob(blob, fileHandle, normalizedFilename);
+
+        if (onComplete) {
+          onComplete({
+            success: true,
+            filename: normalizedFilename,
+            saveLocation: locationLabel || "Download",
+          });
+        }
+      } catch (error) {
+        console.error("[Export]", error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (onComplete) {
+          onComplete({
+            success: false,
+            error: message,
+          });
+        }
+      }
+    },
+    [clips, replaceExportUrl, tracks, aspectRatio, writeExportBlob]
+  );
 
   return (
     <div className="app">
@@ -258,7 +317,18 @@ export default function App() {
         <span className="dim small">Chọn video để thêm vào timeline. Phase 1.1 hiện chưa hỗ trợ kéo, trim, split hoặc snap.</span>
       </div>
 
-      <ExportBar clips={clips} exportState={exportState} onExport={runExport} />
+      <ExportBar clips={clips} onExport={handleExportStart} />
+
+      <ExportSettingsModal
+        open={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={runExport}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
+        tracks={tracks}
+        clips={clips}
+        currentTime={currentTime}
+      />
     </div>
   );
 }
